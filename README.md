@@ -21,6 +21,7 @@ This project was bootstrapped with Vite and React.
     npm install
     ```
 
+
 ### Running the Development Server
 
 To start the development server:
