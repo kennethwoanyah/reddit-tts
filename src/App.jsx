@@ -52,37 +52,79 @@ function App() {
     }
   };
 
-  // Helper function to resolve share ID to post ID
+  // Helper function to resolve share ID to post ID using multiple methods
   const resolveShareId = async (subreddit, shareId) => {
+    const errors = [];
+    
+    // Method 1: Try direct JSON API
     try {
-      // Try to get the post directly from the JSON API first
       const shareUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}.json`;
-      const response = await fetch(shareUrl);
+      console.log('Trying JSON API:', shareUrl);
       
+      const response = await fetch(shareUrl);
       if (response.ok) {
         const data = await response.json();
         if (data?.[0]?.data?.children?.[0]?.data?.id) {
+          console.log('Successfully resolved via JSON API');
           return data[0].data.children[0].data.id;
         }
       }
-      
-      // If that fails, try to get it from the HTML response
-      const htmlResponse = await fetch(`https://old.reddit.com/r/${subreddit}/s/${shareId}`);
-      if (!htmlResponse.ok) {
-        throw new Error('Failed to resolve share link');
-      }
-      
-      const html = await htmlResponse.text();
-      const match = html.match(/\/comments\/([a-zA-Z0-9]+)/);
-      
-      if (!match) {
-        throw new Error('Could not find post ID');
-      }
-      
-      return match[1];
+      errors.push('JSON API method failed');
     } catch (error) {
-      throw new Error(`Failed to resolve share ID: ${error.message}`);
+      errors.push(`JSON API error: ${error.message}`);
     }
+    
+    // Method 2: Try old.reddit.com HTML parsing
+    try {
+      const oldRedditUrl = `https://old.reddit.com/r/${subreddit}/s/${shareId}`;
+      console.log('Trying old.reddit.com:', oldRedditUrl);
+      
+      const response = await fetch(oldRedditUrl);
+      if (response.ok) {
+        const html = await response.text();
+        const match = html.match(/\/comments\/([a-zA-Z0-9]+)/);
+        
+        if (match) {
+          console.log('Successfully resolved via old.reddit.com');
+          return match[1];
+        }
+      }
+      errors.push('old.reddit.com method failed');
+    } catch (error) {
+      errors.push(`old.reddit.com error: ${error.message}`);
+    }
+    
+    // Method 3: Try direct HTML parsing
+    try {
+      const directUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}`;
+      console.log('Trying direct HTML parsing:', directUrl);
+      
+      const response = await fetch(directUrl);
+      if (response.ok) {
+        const html = await response.text();
+        
+        // Try multiple patterns
+        const patterns = [
+          /\/comments\/([a-zA-Z0-9]+)/,
+          /data-post-id="([a-zA-Z0-9]+)"/,
+          /"postId":"([a-zA-Z0-9]+)"/
+        ];
+        
+        for (const pattern of patterns) {
+          const match = html.match(pattern);
+          if (match) {
+            console.log('Successfully resolved via direct HTML parsing');
+            return match[1];
+          }
+        }
+      }
+      errors.push('Direct HTML parsing method failed');
+    } catch (error) {
+      errors.push(`Direct HTML error: ${error.message}`);
+    }
+    
+    // If all methods fail, throw error with details
+    throw new Error(`Failed to resolve share ID. Tried multiple methods:\n${errors.join('\n')}`);
   };
 
   // Main function to fetch Reddit content and initiate speech
