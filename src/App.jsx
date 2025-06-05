@@ -59,24 +59,38 @@ function App() {
       const clientId = import.meta.env.VITE_REDDIT_CLIENT_ID;
       const clientSecret = import.meta.env.VITE_REDDIT_CLIENT_SECRET;
       
+      console.log('Getting Reddit token with:', {
+        clientId,
+        userAgent: import.meta.env.VITE_REDDIT_USER_AGENT
+      });
+      
+      const authString = btoa(`${clientId}:${clientSecret}`);
+      console.log('Making token request to:', tokenUrl);
+      
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`
+          'Authorization': `Basic ${authString}`,
+          'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
         },
         body: 'grant_type=client_credentials'
       });
 
+      console.log('Token response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error(`Token request failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Token error response:', errorText);
+        throw new Error(`Token request failed: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Got token response:', { ...data, access_token: '[REDACTED]' });
       return data.access_token;
     } catch (error) {
       console.error('Error getting Reddit token:', error);
-      throw error;
+      throw new Error(`Reddit authentication failed: ${error.message}`);
     }
   };
 
@@ -99,34 +113,53 @@ function App() {
       // Handle share URLs (/r/subreddit/s/shortId)
       const shareMatch = path.match(/\/r\/([^/]+)\/s\/([^/]+)/);
       if (shareMatch) {
-        // Get OAuth token
-        const token = await getRedditToken();
-        
-        // Use Reddit API to resolve share URL
-        const apiUrl = `https://oauth.reddit.com/api/info?url=${encodeURIComponent(url)}`;
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
+        try {
+          // Get OAuth token
+          console.log('Found share URL:', { subreddit: shareMatch[1], shareId: shareMatch[2] });
+          const token = await getRedditToken();
+          
+          // Use Reddit API to resolve share URL
+          const apiUrl = `https://oauth.reddit.com/api/info?url=${encodeURIComponent(url)}`;
+          console.log('Resolving share URL:', apiUrl);
+          
+          const response = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
+            }
+          });
+          
+          console.log('Share URL resolution status:', response.status);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Share URL error response:', errorText);
+            throw new Error(`Reddit API error: ${response.status} - ${errorText}`);
           }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Reddit API error: ${response.status}`);
+          
+          const data = await response.json();
+          console.log('Share URL response:', data);
+          
+          const post = data?.data?.children?.[0]?.data;
+          if (!post?.id) {
+            throw new Error('Could not find post data in API response');
+          }
+          
+          console.log('Successfully resolved share URL to:', {
+            subreddit: post.subreddit,
+            postId: post.id,
+            title: post.title
+          });
+          
+          return {
+            type: 'share',
+            subreddit: post.subreddit,
+            postId: post.id
+          };
+        } catch (error) {
+          console.error('Share URL resolution error:', error);
+          throw new Error(`Failed to resolve share URL: ${error.message}`);
         }
-        
-        const data = await response.json();
-        const post = data?.data?.children?.[0]?.data;
-        
-        if (!post?.id) {
-          throw new Error('Could not resolve share URL');
-        }
-        
-        return {
-          type: 'share',
-          subreddit: post.subreddit,
-          postId: post.id
-        };
       }
       
       throw new Error('Please use a standard Reddit post URL or share URL');
