@@ -177,7 +177,7 @@ function App() {
           onClick={handleFetchAndPlay} 
           disabled={isFetching || isSpeaking}
         >
-          {isFetching ? 'Fetching...' : (isSpeaking || isPaused) ? 'Playing...' : 'Get & Play Reddit Post'}
+          {isFetching ? 'Fetching...' : (isSpeaking || isPaused) ? 'Playing...' : 'Play Reddit Post'}
         </button>
         {error && <p className="error-message">{error}</p>}
       </div>
