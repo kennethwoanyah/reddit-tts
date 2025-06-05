@@ -109,12 +109,17 @@ function App() {
     // Add Reddit API headers
     const headers = {
       'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Origin': 'https://www.reddit.com',
+      'Referer': 'https://www.reddit.com/',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
     
-    // Use a proxy URL to bypass CORS and User-Agent restrictions
-    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-    fetchUrl = proxyUrl + fetchUrl;
+    // Use a more reliable CORS proxy
+    const proxyUrl = 'https://api.allorigins.win/raw?url=';
+    fetchUrl = proxyUrl + encodeURIComponent(fetchUrl);
 
     try {
       const response = await axios.get(fetchUrl, { headers });
