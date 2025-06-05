@@ -52,126 +52,79 @@ function App() {
     }
   };
 
-  // Helper function to resolve share ID to post ID using multiple methods
+  // Helper function to resolve share ID to post ID
   const resolveShareId = async (subreddit, shareId) => {
-    const errors = [];
-    
-    // Common headers for all requests
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1'
-    };
-    
-    // Method 1: Try direct JSON API
     try {
-      const shareUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}.json`;
-      console.log('Trying JSON API:', shareUrl);
+      // First, try to get the recent posts from the subreddit
+      const searchUrl = `https://www.reddit.com/r/${subreddit}/new.json?limit=100`;
+      console.log('Searching subreddit:', searchUrl);
       
-      const response = await fetch(shareUrl, { 
+      const response = await fetch(searchUrl, {
         headers: {
-          ...headers,
           'Accept': 'application/json'
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.[0]?.data?.children?.[0]?.data?.id) {
-          console.log('Successfully resolved via JSON API');
-          return data[0].data.children[0].data.id;
-        }
+      if (!response.ok) {
+        throw new Error(`Subreddit search failed: ${response.status}`);
       }
-      errors.push(`JSON API method failed: ${response.status}`);
-    } catch (error) {
-      errors.push(`JSON API error: ${error.message}`);
-    }
-    
-    // Method 2: Try old.reddit.com HTML parsing
-    try {
-      const oldRedditUrl = `https://old.reddit.com/r/${subreddit}/s/${shareId}`;
-      console.log('Trying old.reddit.com:', oldRedditUrl);
       
-      const response = await fetch(oldRedditUrl, { headers });
-      if (response.ok) {
-        const html = await response.text();
-        const match = html.match(/\/comments\/([a-zA-Z0-9]+)/);
-        
-        if (match) {
-          console.log('Successfully resolved via old.reddit.com');
-          return match[1];
-        }
-      }
-      errors.push(`old.reddit.com method failed: ${response.status}`);
-    } catch (error) {
-      errors.push(`old.reddit.com error: ${error.message}`);
-    }
-    
-    // Method 3: Try direct HTML parsing
-    try {
-      const directUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}`;
-      console.log('Trying direct HTML parsing:', directUrl);
+      const data = await response.json();
+      const posts = data?.data?.children || [];
       
-      const response = await fetch(directUrl, { headers });
-      if (response.ok) {
-        const html = await response.text();
+      // Look for a post that matches our share ID
+      for (const post of posts) {
+        const postData = post.data;
         
-        // Try multiple patterns
-        const patterns = [
-          /\/comments\/([a-zA-Z0-9]+)/,
-          /data-post-id="([a-zA-Z0-9]+)"/,
-          /"postId":"([a-zA-Z0-9]+)"/,
-          /"id":"([a-zA-Z0-9]+)"/
-        ];
-        
-        for (const pattern of patterns) {
-          const match = html.match(pattern);
-          if (match) {
-            console.log('Successfully resolved via direct HTML parsing');
-            return match[1];
-          }
+        // Try to match the share ID with various post properties
+        if (
+          postData.name?.includes(shareId) ||
+          postData.id?.includes(shareId) ||
+          postData.url?.includes(shareId) ||
+          postData.permalink?.includes(shareId)
+        ) {
+          console.log('Found matching post:', postData.id);
+          return postData.id;
         }
       }
-      errors.push(`Direct HTML parsing method failed: ${response.status}`);
-    } catch (error) {
-      errors.push(`Direct HTML error: ${error.message}`);
-    }
-    
-    // Method 4: Try using a CORS proxy as last resort
-    try {
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const targetUrl = encodeURIComponent(`https://www.reddit.com/r/${subreddit}/s/${shareId}`);
-      console.log('Trying CORS proxy:', proxyUrl + targetUrl);
       
-      const response = await fetch(proxyUrl + targetUrl, { headers });
-      if (response.ok) {
-        const html = await response.text();
+      // If not found in recent posts, try the hot posts
+      const hotUrl = `https://www.reddit.com/r/${subreddit}/hot.json?limit=100`;
+      console.log('Searching hot posts:', hotUrl);
+      
+      const hotResponse = await fetch(hotUrl, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!hotResponse.ok) {
+        throw new Error(`Hot posts search failed: ${hotResponse.status}`);
+      }
+      
+      const hotData = await hotResponse.json();
+      const hotPosts = hotData?.data?.children || [];
+      
+      // Look for a post that matches our share ID in hot posts
+      for (const post of hotPosts) {
+        const postData = post.data;
         
-        // Try all patterns again with proxied content
-        const patterns = [
-          /\/comments\/([a-zA-Z0-9]+)/,
-          /data-post-id="([a-zA-Z0-9]+)"/,
-          /"postId":"([a-zA-Z0-9]+)"/,
-          /"id":"([a-zA-Z0-9]+)"/
-        ];
-        
-        for (const pattern of patterns) {
-          const match = html.match(pattern);
-          if (match) {
-            console.log('Successfully resolved via CORS proxy');
-            return match[1];
-          }
+        if (
+          postData.name?.includes(shareId) ||
+          postData.id?.includes(shareId) ||
+          postData.url?.includes(shareId) ||
+          postData.permalink?.includes(shareId)
+        ) {
+          console.log('Found matching post in hot:', postData.id);
+          return postData.id;
         }
       }
-      errors.push(`CORS proxy method failed: ${response.status}`);
+      
+      throw new Error('Could not find post in recent or hot posts');
     } catch (error) {
-      errors.push(`CORS proxy error: ${error.message}`);
+      console.error('Error resolving share ID:', error);
+      throw new Error(`Failed to resolve share ID: ${error.message}`);
     }
-    
-    // If all methods fail, throw error with details
-    throw new Error(`Failed to resolve share ID. Tried multiple methods:\n${errors.join('\n')}`);
   };
 
   // Main function to fetch Reddit content and initiate speech
