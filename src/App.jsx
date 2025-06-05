@@ -58,50 +58,85 @@ function App() {
   const resolveShareUrl = async (url) => {
     try {
       console.log('Resolving share URL:', url);
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const response = await fetch(proxyUrl + encodeURIComponent(url));
       
-      if (!response.ok) {
-        throw new Error(`Failed to resolve share URL: ${response.status}`);
-      }
-      
-      // The proxy will return the HTML content
-      const html = await response.text();
-      console.log('Got HTML response length:', html.length);
-      
-      // Try different patterns to find the full URL
-      const patterns = [
-        // Canonical URL
-        /canonical"\s+href="([^"]+)"/i,
-        // Meta refresh URL
-        /content="0;\s*URL=([^"]+)"/i,
-        // Comments link
-        /href="(\/r\/[^/]+\/comments\/[^/]+)/i,
-        // JSON data
-        /"permalink":"([^"]+)"/,
-        // Post URL
-        /"url":"([^"]+\/comments\/[^"]+)"/
+      // Try different proxy services
+      const proxyServices = [
+        {
+          name: 'allorigins raw',
+          url: 'https://api.allorigins.win/raw?url='
+        },
+        {
+          name: 'allorigins get',
+          url: 'https://api.allorigins.win/get?url=',
+          processResponse: async (res) => {
+            const data = await res.json();
+            return data.contents;
+          }
+        },
+        {
+          name: 'corsproxy',
+          url: 'https://corsproxy.io/?'
+        }
       ];
       
-      for (const pattern of patterns) {
-        const match = html.match(pattern);
-        if (match) {
-          let fullUrl = match[1];
+      // Try each proxy service
+      for (const proxy of proxyServices) {
+        try {
+          console.log(`Trying ${proxy.name}...`);
+          const response = await fetch(proxy.url + encodeURIComponent(url));
           
-          // Clean up the URL
-          if (!fullUrl.startsWith('http')) {
-            fullUrl = 'https://www.reddit.com' + fullUrl;
+          if (!response.ok) {
+            console.log(`${proxy.name} failed with status:`, response.status);
+            continue;
           }
-          fullUrl = fullUrl.replace(/\\\//g, '/'); // Fix escaped slashes
           
-          console.log('Found URL using pattern:', pattern, '\nResolved to:', fullUrl);
-          return fullUrl;
+          // Get HTML content
+          const html = proxy.processResponse 
+            ? await proxy.processResponse(response)
+            : await response.text();
+          
+          console.log(`Got HTML from ${proxy.name}, length:`, html.length);
+          
+          // Try different patterns to find the full URL
+          const patterns = [
+            // Canonical URL
+            /canonical"\s+href="([^"]+)"/i,
+            // Meta refresh URL
+            /content="0;\s*URL=([^"]+)"/i,
+            // Comments link
+            /href="(\/r\/[^/]+\/comments\/[^/]+)/i,
+            // JSON data
+            /"permalink":"([^"]+)"/,
+            // Post URL
+            /"url":"([^"]+\/comments\/[^"]+)"/,
+            // Link tag
+            /<link[^>]+href="([^"]+\/comments\/[^"]+)"/i
+          ];
+          
+          for (const pattern of patterns) {
+            const match = html.match(pattern);
+            if (match) {
+              let fullUrl = match[1];
+              
+              // Clean up the URL
+              if (!fullUrl.startsWith('http')) {
+                fullUrl = 'https://www.reddit.com' + fullUrl;
+              }
+              fullUrl = fullUrl.replace(/\\\//g, '/'); // Fix escaped slashes
+              
+              console.log(`Found URL using ${proxy.name} and pattern:`, pattern);
+              console.log('Resolved to:', fullUrl);
+              return fullUrl;
+            }
+          }
+          
+          console.log(`No patterns matched in ${proxy.name} response. Sample:`, html.substring(0, 200));
+        } catch (proxyError) {
+          console.log(`${proxy.name} error:`, proxyError.message);
         }
       }
       
-      // If no patterns match, log a sample of the HTML for debugging
-      console.error('Could not find URL in HTML. Sample:', html.substring(0, 500));
-      throw new Error('Could not find Reddit post URL in response');
+      throw new Error('Could not find Reddit post URL using any proxy service');
     } catch (error) {
       console.error('Share URL resolution error:', error);
       throw new Error(`Failed to resolve share URL: ${error.message}`);
