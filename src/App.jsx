@@ -55,72 +55,72 @@ function App() {
   // Helper function to resolve share ID to post ID
   const resolveShareId = async (subreddit, shareId) => {
     try {
-      // First, try to get the recent posts from the subreddit
-      const searchUrl = `https://www.reddit.com/r/${subreddit}/new.json?limit=100`;
-      console.log('Searching subreddit:', searchUrl);
-      
-      const response = await fetch(searchUrl, {
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Subreddit search failed: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const posts = data?.data?.children || [];
-      
-      // Look for a post that matches our share ID
-      for (const post of posts) {
-        const postData = post.data;
+      // Try different search methods
+      const searchMethods = [
+        // Method 1: Direct share URL
+        async () => {
+          const url = `https://www.reddit.com/r/${subreddit}/s/${shareId}.json`;
+          console.log('Trying direct share URL:', url);
+          const response = await fetch(url);
+          const data = await response.json();
+          return data?.[0]?.data?.children?.[0]?.data?.id;
+        },
         
-        // Try to match the share ID with various post properties
-        if (
-          postData.name?.includes(shareId) ||
-          postData.id?.includes(shareId) ||
-          postData.url?.includes(shareId) ||
-          postData.permalink?.includes(shareId)
-        ) {
-          console.log('Found matching post:', postData.id);
-          return postData.id;
-        }
-      }
-      
-      // If not found in recent posts, try the hot posts
-      const hotUrl = `https://www.reddit.com/r/${subreddit}/hot.json?limit=100`;
-      console.log('Searching hot posts:', hotUrl);
-      
-      const hotResponse = await fetch(hotUrl, {
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!hotResponse.ok) {
-        throw new Error(`Hot posts search failed: ${hotResponse.status}`);
-      }
-      
-      const hotData = await hotResponse.json();
-      const hotPosts = hotData?.data?.children || [];
-      
-      // Look for a post that matches our share ID in hot posts
-      for (const post of hotPosts) {
-        const postData = post.data;
+        // Method 2: Search subreddit
+        async () => {
+          const url = `https://www.reddit.com/r/${subreddit}/search.json?q=${shareId}&restrict_sr=on&limit=100`;
+          console.log('Searching subreddit:', url);
+          const response = await fetch(url);
+          const data = await response.json();
+          const posts = data?.data?.children || [];
+          
+          for (const post of posts) {
+            if (post.data?.id && (
+              post.data.name?.includes(shareId) ||
+              post.data.id?.includes(shareId) ||
+              post.data.url?.includes(shareId)
+            )) {
+              return post.data.id;
+            }
+          }
+          return null;
+        },
         
-        if (
-          postData.name?.includes(shareId) ||
-          postData.id?.includes(shareId) ||
-          postData.url?.includes(shareId) ||
-          postData.permalink?.includes(shareId)
-        ) {
-          console.log('Found matching post in hot:', postData.id);
-          return postData.id;
+        // Method 3: Try to extract ID from URL
+        async () => {
+          // Try to find any alphanumeric ID in the share URL
+          const matches = shareId.match(/[a-zA-Z0-9]{6,}/g) || [];
+          for (const match of matches) {
+            const url = `https://www.reddit.com/comments/${match}.json`;
+            console.log('Trying extracted ID:', url);
+            try {
+              const response = await fetch(url);
+              if (response.ok) {
+                const data = await response.json();
+                return data?.[0]?.data?.children?.[0]?.data?.id;
+              }
+            } catch (e) {
+              console.log('ID check failed:', match);
+            }
+          }
+          return null;
+        }
+      ];
+      
+      // Try each method in sequence
+      for (const method of searchMethods) {
+        try {
+          const result = await method();
+          if (result) {
+            console.log('Found post ID:', result);
+            return result;
+          }
+        } catch (error) {
+          console.log('Method failed:', error.message);
         }
       }
       
-      throw new Error('Could not find post in recent or hot posts');
+      throw new Error('Could not find post using any method');
     } catch (error) {
       console.error('Error resolving share ID:', error);
       throw new Error(`Failed to resolve share ID: ${error.message}`);
