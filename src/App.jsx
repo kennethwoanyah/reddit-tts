@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import './App.css';
 
 function App() {
@@ -65,34 +64,52 @@ function App() {
     
     try {
       // Process the URL and extract post ID and subreddit
+      let finalPath;
+      
       if (oldFormatMatch) {
         // Standard format: /r/subreddit/comments/post_id/...
         subreddit = oldFormatMatch[1];
         postId = oldFormatMatch[2];
+        finalPath = `/r/${subreddit}/comments/${postId}.json`;
       } else if (newFormatMatch) {
         // New format: /r/subreddit/s/post_id
         subreddit = newFormatMatch[1];
-        postId = newFormatMatch[2];
+        const shortId = newFormatMatch[2];
+        
+        // First, get the actual post ID from the short ID
+        const shortUrl = `https://www.reddit.com/r/${subreddit}/s/${shortId}`;
+        console.log('Fetching post data from short URL:', shortUrl);
+        
+        const response = await fetch(shortUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to resolve short URL: ${response.status} ${response.statusText}`);
+        }
+        
+        // Extract the actual post ID from the response URL
+        const fullUrl = response.url;
+        const fullPostMatch = fullUrl.match(/\/comments\/([^/]+)/);
+        if (!fullPostMatch) {
+          throw new Error('Could not extract post ID from short URL');
+        }
+        
+        postId = fullPostMatch[1];
+        finalPath = `/r/${subreddit}/comments/${postId}.json`;
       } else if (mobileFormatMatch) {
         // Mobile format
         postId = mobileFormatMatch[1];
+        finalPath = `/comments/${postId}.json`;
       } else {
         // Try to handle subreddit-only URLs
         const subredditMatch = cleanPath.match(/^\/r\/([^/]+)$/);
         if (subredditMatch) {
           subreddit = subredditMatch[1];
-          path = `/r/${subreddit}/hot.json?limit=1`;
+          finalPath = `/r/${subreddit}/hot.json?limit=1`;
         } else {
           throw new Error('Unsupported Reddit URL format');
         }
       }
-
-      // Construct the API URL
-      if (postId) {
-        path = subreddit
-          ? `/r/${subreddit}/comments/${postId}.json`
-          : `/comments/${postId}.json`;
-      }
+      
+      path = finalPath;
 
       // Construct the Reddit API URL
       const apiUrl = `https://www.reddit.com${path}`;
