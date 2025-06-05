@@ -43,9 +43,20 @@ function App() {
       fetchUrl = rawUrl; // Already HTTPS
     }
 
-    // Append .json and remove trailing slash if necessary
-    if (fetchUrl.endsWith('/')) fetchUrl = fetchUrl.slice(0, -1);
-    if (!fetchUrl.endsWith('.json')) fetchUrl += '.json';
+    // Parse URL to handle query parameters correctly
+    const urlObj = new URL(fetchUrl);
+    // Remove any existing query parameters
+    urlObj.search = '';
+    // Remove trailing slash if present
+    if (urlObj.pathname.endsWith('/')) {
+      urlObj.pathname = urlObj.pathname.slice(0, -1);
+    }
+    // Add .json if not already present
+    if (!urlObj.pathname.endsWith('.json')) {
+      urlObj.pathname += '.json';
+    }
+    // Update fetchUrl with the cleaned URL
+    fetchUrl = urlObj.toString();
 
     let currentExtractedText = '';
     const headers = {};
