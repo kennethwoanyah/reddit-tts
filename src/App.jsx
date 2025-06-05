@@ -160,6 +160,8 @@ function App() {
       setIsFetching(false);
     }
 
+
+    
       if (!postData) {
         setError('Could not fetch post data. Please check the URL.');
         setIsFetching(false);
