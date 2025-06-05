@@ -59,12 +59,11 @@ function App() {
     // Handle both URL formats
     if (path.includes('/s/')) {
       // New format: /r/subreddit/s/post_id
-      // Add .json to the end
-      path += '.json';
-      // Add fallback for new format
-      if (!path.includes('.json')) {
-        path = path.replace('/s/', '/s/.json');
-      }
+      // For new format, we need to get the post ID and construct the proper URL
+      const parts = path.split('/');
+      const postId = parts[parts.length - 1];
+      const subreddit = parts[2];
+      path = `/r/${subreddit}/comments/${postId}.json`;
     } else if (path.includes('/comments/')) {
       // Old format: /r/subreddit/comments/post_id/post_title
       // Ensure .json is added
@@ -76,7 +75,7 @@ function App() {
       const match = path.match(/^\/r\/([^/]+)$/);
       if (match) {
         // If it's just a subreddit URL, try to get the first post
-        path = `/r/${match[1]}/s/1.json`;
+        path = `/r/${match[1]}/hot.json?limit=1`;
       } else {
         // If we can't determine the format, throw an error
         throw new Error('Unsupported Reddit URL format');
@@ -85,11 +84,17 @@ function App() {
     
     // Update the URL object with the normalized path
     urlObj.pathname = path;
+    
     // Update fetchUrl with the cleaned URL
     fetchUrl = urlObj.toString();
 
     let currentExtractedText = '';
-    const headers = {};
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    };
+    if (import.meta.env.VITE_REDDIT_USER_AGENT) {
+      headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
+    }
     if (import.meta.env.VITE_REDDIT_USER_AGENT) {
       headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
     }
