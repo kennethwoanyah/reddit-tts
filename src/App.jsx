@@ -94,22 +94,24 @@ function App() {
           : `/comments/${postId}.json`;
       }
 
-      // Add Reddit API headers
-      const headers = {
-        'Accept': 'application/json',
-        'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      };
+      // Construct the Reddit API URL
+      const apiUrl = `https://www.reddit.com${path}`;
+      console.log('Processing Reddit URL:', apiUrl);
 
-      // Construct the final URL
-      const finalUrl = new URL('https://www.reddit.com' + path);
-      console.log('Processing Reddit URL:', finalUrl.toString());
+      // Make the request with minimal headers
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
 
-      // Use a more reliable CORS proxy
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const requestUrl = proxyUrl + encodeURIComponent(finalUrl.toString());
+      if (!response.ok) {
+        throw new Error(`Reddit API error: ${response.status} ${response.statusText}`);
+      }
 
-      // Make the request
-      const response = await axios.get(requestUrl, { headers });
+      const data = await response.json();
+      response.data = data; // Keep compatibility with axios response format
       console.log('Reddit API Response:', response.data);
 
       // Initialize variables
