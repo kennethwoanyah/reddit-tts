@@ -40,12 +40,45 @@ function App() {
   // Helper function to resolve share links
   const resolveShareLink = async (shareUrl) => {
     try {
-      const response = await fetch(shareUrl, { method: 'HEAD', redirect: 'follow' });
+      // First try to extract post ID from the share URL
+      const shareMatch = shareUrl.match(/\/s\/([a-zA-Z0-9]+)/);
+      if (!shareMatch) {
+        throw new Error('Invalid share URL format');
+      }
+      
+      const shortId = shareMatch[1];
+      console.log('Extracted short ID:', shortId);
+      
+      // Convert share URL to old.reddit.com to avoid client-side redirects
+      const oldRedditUrl = shareUrl.replace('www.reddit.com', 'old.reddit.com');
+      console.log('Using old Reddit URL:', oldRedditUrl);
+      
+      const response = await fetch(oldRedditUrl);
       if (!response.ok) {
         throw new Error(`Failed to resolve share link: ${response.status}`);
       }
-      return response.url;
+      
+      const html = await response.text();
+      
+      // Extract the post ID from the HTML response
+      const postMatch = html.match(/\/comments\/([a-zA-Z0-9]+)/);
+      if (!postMatch) {
+        throw new Error('Could not find post ID in response');
+      }
+      
+      const postId = postMatch[1];
+      console.log('Resolved post ID:', postId);
+      
+      // Extract subreddit from the original URL
+      const subredditMatch = shareUrl.match(/\/r\/([^/]+)/);
+      const subreddit = subredditMatch ? subredditMatch[1] : null;
+      
+      // Construct the API URL
+      return subreddit
+        ? `https://www.reddit.com/r/${subreddit}/comments/${postId}`
+        : `https://www.reddit.com/comments/${postId}`;
     } catch (error) {
+      console.error('Share link resolution error:', error);
       throw new Error(`Failed to resolve share link: ${error.message}`);
     }
   };
@@ -82,9 +115,16 @@ function App() {
       let finalUrl;
       if (urlInfo.type === 'share_link' || urlInfo.type === 'mobile_url') {
         // Resolve share links to get the actual post URL
-        const resolvedUrl = await resolveShareLink(processedUrl);
-        console.log('Resolved share URL:', resolvedUrl);
-        finalUrl = resolvedUrl;
+        try {
+          console.log('Resolving share URL:', processedUrl);
+          finalUrl = await resolveShareLink(processedUrl);
+          console.log('Successfully resolved to:', finalUrl);
+        } catch (error) {
+          console.error('Share link resolution failed:', error);
+          setError(`Failed to resolve share link: ${error.message}`);
+          setIsFetching(false);
+          return;
+        }
       } else {
         finalUrl = processedUrl;
       }
