@@ -102,15 +102,15 @@ function App() {
     fetchUrl = urlObj.toString();
 
     let currentExtractedText = '';
+    // Add Reddit API headers
     const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
     };
-    if (import.meta.env.VITE_REDDIT_USER_AGENT) {
-      headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
-    }
-    if (import.meta.env.VITE_REDDIT_USER_AGENT) {
-      headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
-    }
+    
+    // Use a proxy URL to bypass CORS and User-Agent restrictions
+    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+    fetchUrl = proxyUrl + fetchUrl;
 
     try {
       const response = await axios.get(fetchUrl, { headers });
