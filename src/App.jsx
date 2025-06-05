@@ -49,9 +49,10 @@ function App() {
 
     let currentExtractedText = '';
     const headers = {};
-    if (import.meta.env.VITE_REDDIT_USER_AGENT) {
-      headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
-    }
+    // Temporarily commenting out User-Agent for mobile network error debugging
+    // if (import.meta.env.VITE_REDDIT_USER_AGENT) {
+    //   headers['User-Agent'] = import.meta.env.VITE_REDDIT_USER_AGENT;
+    // }
 
     try {
       const response = await axios.get(fetchUrl, { headers });
