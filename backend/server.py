@@ -1,63 +1,84 @@
+import httpx
 from fastapi import FastAPI, HTTPException
-from playwright.async_api import async_playwright
-import os
-from dotenv import load_dotenv
+import re
+from typing import Optional
 
 app = FastAPI()
+
+async def extract_post_id_from_url(url: str) -> Optional[str]:
+    """Extract post ID from Reddit URL"""
+    # Handle mobile format: /m/comments/post_id/post_title
+    mobile_match = re.search(r'/m/comments/([^/]+)', url)
+    if mobile_match:
+        return mobile_match.group(1)
+    
+    # Handle desktop format: /r/subreddit/comments/post_id/post_title
+    desktop_match = re.search(r'/comments/([^/]+)', url)
+    if desktop_match:
+        return desktop_match.group(1)
+    
+    # Handle new format: /r/subreddit/s/post_id
+    new_format_match = re.search(r'/s/([^/]+)', url)
+    if new_format_match:
+        return new_format_match.group(1)
+    
+    return None
 
 @app.get("/fetch_reddit_content")
 async def fetch_reddit_content(url: str):
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+        # Extract post ID from URL
+        post_id = await extract_post_id_from_url(url)
+        if not post_id:
+            raise HTTPException(status_code=400, detail="Could not extract post ID from URL")
+        
+        # Use Reddit's public API endpoint
+        api_url = f"https://www.reddit.com/comments/{post_id}.json"
+        
+        # Make request with proper headers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(api_url, headers=headers)
+            response.raise_for_status()
             
-            # Set appropriate user agent based on URL
-            if '/m/' in url or '/mobile/' in url:
-                await page.set_extra_http_headers({
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36'
-                })
-            else:
-                await page.set_extra_http_headers({
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                })
+            data = response.json()
             
-            # Navigate to the URL
-            await page.goto(url)
+            # Extract post data from first array element
+            post_data = data[0]['data']['children'][0]['data']
             
-            # Wait for content based on URL type
-            if '/m/' in url or '/mobile/' in url:
-                # Mobile Reddit selectors
-                await page.wait_for_selector("[data-testid='post-content']")
-                title = await page.text_content("[data-testid='post-content'] h1")
-                body = await page.text_content("[data-testid='post-content'] div[data-testid='post-content-text']")
-                
-                # Mobile comments
-                comments = []
-                comment_elements = await page.query_selector_all("[data-testid='comment']")
-                for element in comment_elements[:10]:
-                    comment_text = await element.text_content()
-                    comments.append(comment_text)
-            else:
-                # Desktop Reddit selectors
-                await page.wait_for_selector("[data-testid='post-fullscreen']")
-                title = await page.text_content("[data-testid='post-fullscreen'] h1")
-                body = await page.text_content("[data-testid='post-fullscreen'] div[data-testid='post-content-text']")
-                
-                # Desktop comments
-                comments = []
-                comment_elements = await page.query_selector_all("[data-testid='comment']")
-                for element in comment_elements[:10]:
-                    comment_text = await element.text_content()
-                    comments.append(comment_text)
-            
-            await browser.close()
+            # Extract comments from second array element
+            comments = []
+            for comment in data[1]['data']['children'][:10]:  # Get top 10 comments
+                comment_data = comment['data']
+                if comment_data.get('body'):
+                    comments.append({
+                        'author': comment_data.get('author', 'unknown'),
+                        'body': comment_data['body'],
+                        'score': comment_data.get('score', 0)
+                    })
             
             return {
-                "title": title,
-                "body": body,
+                "title": post_data.get('title', ''),
+                "body": post_data.get('selftext', ''),
+                "author": post_data.get('author', 'unknown'),
+                "score": post_data.get('score', 0),
                 "comments": comments
             }
+            
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"HTTP error: {e.response.text}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching content: {str(e)}"
+        )
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
