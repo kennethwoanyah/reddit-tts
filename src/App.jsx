@@ -113,7 +113,9 @@ function App() {
     fetchUrl = proxyUrl + fetchUrl;
 
     try {
-      const response = await axios.get(fetchUrl, { headers });
+      // Use our backend server to fetch the content
+      const backendUrl = 'http://localhost:8000/fetch_reddit_content?url=' + encodeURIComponent(fetchUrl);
+      const response = await axios.get(backendUrl);
       console.log('Response data:', response.data);
       
       // Handle both new and old format responses
