@@ -52,51 +52,34 @@ function App() {
     }
   };
 
-  // Helper function to get Reddit OAuth token
-  const getRedditToken = async () => {
-    try {
-      // Use the allorigins proxy to avoid CORS issues
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const tokenUrl = 'https://www.reddit.com/api/v1/access_token';
-      const clientId = import.meta.env.VITE_REDDIT_CLIENT_ID?.trim();
-      const clientSecret = import.meta.env.VITE_REDDIT_CLIENT_SECRET?.trim();
-      
-      console.log('Getting Reddit token with:', {
-        clientId,
-        userAgent: import.meta.env.VITE_REDDIT_USER_AGENT
-      });
-      
-      // Create form data
-      const formData = new URLSearchParams();
-      formData.append('grant_type', 'client_credentials');
-      
-      // Create authorization header
-      const authString = btoa(`${clientId}:${clientSecret}`);
-      
-      // Make the request through the proxy
-      const response = await fetch(proxyUrl + encodeURIComponent(tokenUrl), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${authString}`
-        },
-        body: formData.toString()
-      });
 
-      console.log('Token response status:', response.status);
+
+  // Helper function to resolve share URL to full URL
+  const resolveShareUrl = async (url) => {
+    try {
+      console.log('Resolving share URL:', url);
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const response = await fetch(proxyUrl + encodeURIComponent(url));
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Token error response:', errorText);
-        throw new Error(`Token request failed: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to resolve share URL: ${response.status}`);
       }
-
-      const data = await response.json();
-      console.log('Got token response:', { ...data, access_token: '[REDACTED]' });
-      return data.access_token;
+      
+      // The proxy will return the HTML content
+      const html = await response.text();
+      
+      // Look for the canonical URL in the HTML
+      const canonicalMatch = html.match(/canonical"\s+href="([^"]+)"/i);
+      if (!canonicalMatch) {
+        throw new Error('Could not find canonical URL in response');
+      }
+      
+      const fullUrl = canonicalMatch[1];
+      console.log('Resolved to full URL:', fullUrl);
+      return fullUrl;
     } catch (error) {
-      console.error('Error getting Reddit token:', error);
-      throw new Error(`Reddit authentication failed: ${error.message}`);
+      console.error('Share URL resolution error:', error);
+      throw new Error(`Failed to resolve share URL: ${error.message}`);
     }
   };
 
@@ -119,53 +102,23 @@ function App() {
       // Handle share URLs (/r/subreddit/s/shortId)
       const shareMatch = path.match(/\/r\/([^/]+)\/s\/([^/]+)/);
       if (shareMatch) {
-        try {
-          // Get OAuth token
-          console.log('Found share URL:', { subreddit: shareMatch[1], shareId: shareMatch[2] });
-          const token = await getRedditToken();
-          
-          // Use Reddit API through proxy to resolve share URL
-          const proxyUrl = 'https://api.allorigins.win/raw?url=';
-          const apiUrl = `https://oauth.reddit.com/api/info?url=${encodeURIComponent(url)}`;
-          console.log('Resolving share URL:', apiUrl);
-          
-          const response = await fetch(proxyUrl + encodeURIComponent(apiUrl), {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          console.log('Share URL resolution status:', response.status);
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Share URL error response:', errorText);
-            throw new Error(`Reddit API error: ${response.status} - ${errorText}`);
-          }
-          
-          const data = await response.json();
-          console.log('Share URL response:', data);
-          
-          const post = data?.data?.children?.[0]?.data;
-          if (!post?.id) {
-            throw new Error('Could not find post data in API response');
-          }
-          
-          console.log('Successfully resolved share URL to:', {
-            subreddit: post.subreddit,
-            postId: post.id,
-            title: post.title
-          });
-          
-          return {
-            type: 'share',
-            subreddit: post.subreddit,
-            postId: post.id
-          };
-        } catch (error) {
-          console.error('Share URL resolution error:', error);
-          throw new Error(`Failed to resolve share URL: ${error.message}`);
+        // First resolve the share URL to get the full URL
+        const fullUrl = await resolveShareUrl(url);
+        
+        // Extract info from the resolved URL
+        const resolvedUrlObj = new URL(fullUrl);
+        const resolvedPath = resolvedUrlObj.pathname;
+        
+        const resolvedMatch = resolvedPath.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
+        if (!resolvedMatch) {
+          throw new Error('Could not extract post info from resolved URL');
         }
+        
+        return {
+          type: 'share',
+          subreddit: resolvedMatch[1],
+          postId: resolvedMatch[2]
+        };
       }
       
       throw new Error('Please use a standard Reddit post URL or share URL');
