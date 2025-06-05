@@ -164,21 +164,45 @@ function App() {
       if (shareMatch) {
         // First resolve the share URL to get the full URL
         const fullUrl = await resolveShareUrl(url);
+        console.log('Got full URL:', fullUrl);
         
-        // Extract info from the resolved URL
-        const resolvedUrlObj = new URL(fullUrl);
-        const resolvedPath = resolvedUrlObj.pathname;
+        // Try different patterns to extract post info
+        const patterns = [
+          // Standard format: /r/subreddit/comments/postid/...
+          /\/r\/([^/]+)\/comments\/([^/]+)/,
+          // Short format: /comments/postid
+          /\/comments\/([^/]+)/,
+          // New format: /r/subreddit/s/postid
+          /\/r\/([^/]+)\/s\/([^/]+)/
+        ];
         
-        const resolvedMatch = resolvedPath.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
-        if (!resolvedMatch) {
-          throw new Error('Could not extract post info from resolved URL');
+        for (const pattern of patterns) {
+          const match = fullUrl.match(pattern);
+          console.log('Trying pattern:', pattern);
+          
+          if (match) {
+            console.log('Pattern matched:', match);
+            
+            if (match.length === 3) {
+              // Pattern with subreddit and post ID
+              return {
+                type: 'share',
+                subreddit: match[1],
+                postId: match[2]
+              };
+            } else if (match.length === 2) {
+              // Pattern with just post ID
+              return {
+                type: 'share',
+                subreddit: shareMatch[1], // Use subreddit from original URL
+                postId: match[1]
+              };
+            }
+          }
         }
         
-        return {
-          type: 'share',
-          subreddit: resolvedMatch[1],
-          postId: resolvedMatch[2]
-        };
+        console.error('Could not parse URL:', fullUrl);
+        throw new Error('Could not extract post info from resolved URL');
       }
       
       throw new Error('Please use a standard Reddit post URL or share URL');
