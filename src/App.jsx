@@ -52,78 +52,24 @@ function App() {
     }
   };
 
-  // Helper function to resolve share ID to post ID
-  const resolveShareId = async (subreddit, shareId) => {
+  // Helper function to extract post info from URL
+  const extractPostInfo = (url) => {
     try {
-      // Try different search methods
-      const searchMethods = [
-        // Method 1: Direct share URL
-        async () => {
-          const url = `https://www.reddit.com/r/${subreddit}/s/${shareId}.json`;
-          console.log('Trying direct share URL:', url);
-          const response = await fetch(url);
-          const data = await response.json();
-          return data?.[0]?.data?.children?.[0]?.data?.id;
-        },
-        
-        // Method 2: Search subreddit
-        async () => {
-          const url = `https://www.reddit.com/r/${subreddit}/search.json?q=${shareId}&restrict_sr=on&limit=100`;
-          console.log('Searching subreddit:', url);
-          const response = await fetch(url);
-          const data = await response.json();
-          const posts = data?.data?.children || [];
-          
-          for (const post of posts) {
-            if (post.data?.id && (
-              post.data.name?.includes(shareId) ||
-              post.data.id?.includes(shareId) ||
-              post.data.url?.includes(shareId)
-            )) {
-              return post.data.id;
-            }
-          }
-          return null;
-        },
-        
-        // Method 3: Try to extract ID from URL
-        async () => {
-          // Try to find any alphanumeric ID in the share URL
-          const matches = shareId.match(/[a-zA-Z0-9]{6,}/g) || [];
-          for (const match of matches) {
-            const url = `https://www.reddit.com/comments/${match}.json`;
-            console.log('Trying extracted ID:', url);
-            try {
-              const response = await fetch(url);
-              if (response.ok) {
-                const data = await response.json();
-                return data?.[0]?.data?.children?.[0]?.data?.id;
-              }
-            } catch (e) {
-              console.log('ID check failed:', match);
-            }
-          }
-          return null;
-        }
-      ];
+      const urlObj = new URL(url);
+      const path = urlObj.pathname;
       
-      // Try each method in sequence
-      for (const method of searchMethods) {
-        try {
-          const result = await method();
-          if (result) {
-            console.log('Found post ID:', result);
-            return result;
-          }
-        } catch (error) {
-          console.log('Method failed:', error.message);
-        }
+      // Handle standard Reddit post URLs
+      const postMatch = path.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
+      if (postMatch) {
+        return {
+          subreddit: postMatch[1],
+          postId: postMatch[2]
+        };
       }
       
-      throw new Error('Could not find post using any method');
+      throw new Error('Please use a standard Reddit post URL (e.g., https://www.reddit.com/r/subreddit/comments/postid/...)');
     } catch (error) {
-      console.error('Error resolving share ID:', error);
-      throw new Error(`Failed to resolve share ID: ${error.message}`);
+      throw new Error('Invalid Reddit URL: ' + error.message);
     }
   };
 
@@ -145,7 +91,7 @@ function App() {
     setError(null);
 
     try {
-      // Ensure HTTPS
+      // Clean and validate the URL
       let processedUrl = redditUrl.trim();
       if (!processedUrl.startsWith('http')) {
         processedUrl = 'https://' + processedUrl;
@@ -153,93 +99,71 @@ function App() {
         processedUrl = processedUrl.replace('http://', 'https://');
       }
 
-      try {
-        // Extract post info from URL
-        const postInfo = extractRedditPostInfo(processedUrl);
-        console.log('Extracted post info:', postInfo);
-        
-        // Determine the API URL
-        let apiUrl;
-        
-        if (postInfo.shareId) {
-          // Handle share links
-          console.log('Resolving share ID:', postInfo.shareId);
-          const postId = await resolveShareId(postInfo.subreddit, postInfo.shareId);
-          apiUrl = `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postId}.json`;
-        } else if (postInfo.postId) {
-          // Handle direct post links
-          apiUrl = postInfo.subreddit
-            ? `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postInfo.postId}.json`
-            : `https://www.reddit.com/comments/${postInfo.postId}.json`;
-        } else {
-          throw new Error('Could not determine post ID');
-        }
-        
-        console.log('Fetching from API URL:', apiUrl);
-        
-        // Fetch the post data
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Reddit API error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Reddit API Response:', data);
+      // Extract post info
+      const postInfo = extractPostInfo(processedUrl);
+      console.log('Extracted post info:', postInfo);
 
-        // Process the response data
-        let postData = null;
-        let commentsData = [];
-        
-        if (Array.isArray(data) && data.length > 0) {
-          // Standard post format
-          postData = data[0]?.data?.children[0]?.data;
-          commentsData = data[1]?.data?.children || [];
-        } else if (data?.data?.children) {
-          // Subreddit or listing format
-          postData = data.data.children[0]?.data;
-          commentsData = data.data.children.slice(1) || [];
+      // Construct API URL
+      const apiUrl = `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postInfo.postId}.json`;
+      console.log('Fetching from:', apiUrl);
+
+      // Fetch post data
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Accept': 'application/json'
         }
+      });
 
-        if (!postData) {
-          throw new Error('Could not extract post data from response');
-        }
-
-        // Build the text content
-        let currentExtractedText = `Post Title: ${postData.title}\n`;
-        
-        if (postData.selftext) {
-          currentExtractedText += `\nPost Content:\n${postData.selftext}\n`;
-        }
-
-        if (commentsData.length > 0) {
-          currentExtractedText += `\nTop Comments:\n`;
-          commentsData
-            .filter(comment => comment.data?.body)
-            .slice(0, 10)
-            .forEach((comment, index) => {
-              currentExtractedText += `\nComment ${index + 1} by ${comment.data.author || 'unknown'}:\n${comment.data.body}\n`;
-            });
-        }
-
-        setExtractedText(currentExtractedText);
-        console.log('Extracted Content:\n', currentExtractedText);
-        setIsFetching(false);
-        playText(currentExtractedText);
-
-      } catch (error) {
-        console.error('Error fetching Reddit data:', error);
-        setError(`Error: ${error.message}`);
-        setIsFetching(false);
+      if (!response.ok) {
+        throw new Error(`Reddit API error: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.log('Reddit API Response:', data);
+
+      // Process the response data
+      let postData = null;
+      let commentsData = [];
+
+      if (Array.isArray(data) && data.length > 0) {
+        // Standard post format
+        postData = data[0]?.data?.children[0]?.data;
+        commentsData = data[1]?.data?.children || [];
+      } else if (data?.data?.children) {
+        // Subreddit or listing format
+        postData = data.data.children[0]?.data;
+        commentsData = data.data.children.slice(1) || [];
+      }
+
+      if (!postData) {
+        throw new Error('Could not extract post data from response');
+      }
+
+      // Build the text content
+      let currentExtractedText = `Post Title: ${postData.title}\n`;
+      
+      if (postData.selftext) {
+        currentExtractedText += `\nPost Content:\n${postData.selftext}\n`;
+      }
+
+      if (commentsData.length > 0) {
+        currentExtractedText += `\nTop Comments:\n`;
+        commentsData
+          .filter(comment => comment.data?.body)
+          .slice(0, 10)
+          .forEach((comment, index) => {
+            currentExtractedText += `\nComment ${index + 1} by ${comment.data.author || 'unknown'}:\n${comment.data.body}\n`;
+          });
+      }
+
+      setExtractedText(currentExtractedText);
+      console.log('Extracted Content:\n', currentExtractedText);
+      setIsFetching(false);
+      playText(currentExtractedText);
 
     } catch (error) {
       console.error('Error fetching Reddit data:', error);
-      setError(`Error fetching Reddit data: ${error.message}`);
+      setError(`Error: ${error.message}`);
       setIsFetching(false);
     }
   };
