@@ -61,6 +61,10 @@ function App() {
       // New format: /r/subreddit/s/post_id
       // Add .json to the end
       path += '.json';
+      // Add fallback for new format
+      if (!path.includes('.json')) {
+        path = path.replace('/s/', '/s/.json');
+      }
     } else if (path.includes('/comments/')) {
       // Old format: /r/subreddit/comments/post_id/post_title
       // Ensure .json is added
@@ -92,6 +96,7 @@ function App() {
 
     try {
       const response = await axios.get(fetchUrl, { headers });
+      console.log('Response data:', response.data);
       
       // Handle both new and old format responses
       let postData = null;
@@ -102,10 +107,20 @@ function App() {
         // New format response structure
         postData = response.data.data.post;
         commentsData = response.data.data.comments || [];
+        console.log('Using new format:', { post: postData.title, comments: commentsData.length });
       } else if (Array.isArray(response.data) && response.data.length > 1) {
         // Old format response structure
         postData = response.data[0]?.data?.children[0]?.data;
         commentsData = response.data[1]?.data?.children || [];
+        console.log('Using old format:', { post: postData?.title, comments: commentsData.length });
+      } else {
+        // Try another approach for new format
+        if (response.data?.data?.children) {
+          // Sometimes new format might have different structure
+          postData = response.data.data.children[0]?.data;
+          commentsData = response.data.data.children.slice(1) || [];
+          console.log('Using alternative new format:', { post: postData?.title, comments: commentsData.length });
+        }
       }
 
       if (!postData) {
