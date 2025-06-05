@@ -54,97 +54,8 @@ function App() {
 
 
 
-  // Helper function to resolve share URL to full URL
-  const resolveShareUrl = async (url) => {
-    try {
-      console.log('Resolving share URL:', url);
-      
-      // Try different proxy services
-      const proxyServices = [
-        {
-          name: 'allorigins raw',
-          url: 'https://api.allorigins.win/raw?url='
-        },
-        {
-          name: 'allorigins get',
-          url: 'https://api.allorigins.win/get?url=',
-          processResponse: async (res) => {
-            const data = await res.json();
-            return data.contents;
-          }
-        },
-        {
-          name: 'corsproxy',
-          url: 'https://corsproxy.io/?'
-        }
-      ];
-      
-      // Try each proxy service
-      for (const proxy of proxyServices) {
-        try {
-          console.log(`Trying ${proxy.name}...`);
-          const response = await fetch(proxy.url + encodeURIComponent(url));
-          
-          if (!response.ok) {
-            console.log(`${proxy.name} failed with status:`, response.status);
-            continue;
-          }
-          
-          // Get HTML content
-          const html = proxy.processResponse 
-            ? await proxy.processResponse(response)
-            : await response.text();
-          
-          console.log(`Got HTML from ${proxy.name}, length:`, html.length);
-          
-          // Try different patterns to find the full URL
-          const patterns = [
-            // Canonical URL
-            /canonical"\s+href="([^"]+)"/i,
-            // Meta refresh URL
-            /content="0;\s*URL=([^"]+)"/i,
-            // Comments link
-            /href="(\/r\/[^/]+\/comments\/[^/]+)/i,
-            // JSON data
-            /"permalink":"([^"]+)"/,
-            // Post URL
-            /"url":"([^"]+\/comments\/[^"]+)"/,
-            // Link tag
-            /<link[^>]+href="([^"]+\/comments\/[^"]+)"/i
-          ];
-          
-          for (const pattern of patterns) {
-            const match = html.match(pattern);
-            if (match) {
-              let fullUrl = match[1];
-              
-              // Clean up the URL
-              if (!fullUrl.startsWith('http')) {
-                fullUrl = 'https://www.reddit.com' + fullUrl;
-              }
-              fullUrl = fullUrl.replace(/\\\//g, '/'); // Fix escaped slashes
-              
-              console.log(`Found URL using ${proxy.name} and pattern:`, pattern);
-              console.log('Resolved to:', fullUrl);
-              return fullUrl;
-            }
-          }
-          
-          console.log(`No patterns matched in ${proxy.name} response. Sample:`, html.substring(0, 200));
-        } catch (proxyError) {
-          console.log(`${proxy.name} error:`, proxyError.message);
-        }
-      }
-      
-      throw new Error('Could not find Reddit post URL using any proxy service');
-    } catch (error) {
-      console.error('Share URL resolution error:', error);
-      throw new Error(`Failed to resolve share URL: ${error.message}`);
-    }
-  };
-
   // Helper function to extract post info from URL
-  const extractPostInfo = async (url) => {
+  const extractPostInfo = (url) => {
     try {
       const urlObj = new URL(url);
       const path = urlObj.pathname;
@@ -153,59 +64,12 @@ function App() {
       const postMatch = path.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
       if (postMatch) {
         return {
-          type: 'standard',
           subreddit: postMatch[1],
           postId: postMatch[2]
         };
       }
       
-      // Handle share URLs (/r/subreddit/s/shortId)
-      const shareMatch = path.match(/\/r\/([^/]+)\/s\/([^/]+)/);
-      if (shareMatch) {
-        // First resolve the share URL to get the full URL
-        const fullUrl = await resolveShareUrl(url);
-        console.log('Got full URL:', fullUrl);
-        
-        // Try different patterns to extract post info
-        const patterns = [
-          // Standard format: /r/subreddit/comments/postid/...
-          /\/r\/([^/]+)\/comments\/([^/]+)/,
-          // Short format: /comments/postid
-          /\/comments\/([^/]+)/,
-          // New format: /r/subreddit/s/postid
-          /\/r\/([^/]+)\/s\/([^/]+)/
-        ];
-        
-        for (const pattern of patterns) {
-          const match = fullUrl.match(pattern);
-          console.log('Trying pattern:', pattern);
-          
-          if (match) {
-            console.log('Pattern matched:', match);
-            
-            if (match.length === 3) {
-              // Pattern with subreddit and post ID
-              return {
-                type: 'share',
-                subreddit: match[1],
-                postId: match[2]
-              };
-            } else if (match.length === 2) {
-              // Pattern with just post ID
-              return {
-                type: 'share',
-                subreddit: shareMatch[1], // Use subreddit from original URL
-                postId: match[1]
-              };
-            }
-          }
-        }
-        
-        console.error('Could not parse URL:', fullUrl);
-        throw new Error('Could not extract post info from resolved URL');
-      }
-      
-      throw new Error('Please use a standard Reddit post URL or share URL');
+      throw new Error('Please use a standard Reddit post URL (e.g., https://www.reddit.com/r/subreddit/comments/postid/...)');
     } catch (error) {
       throw new Error('Invalid Reddit URL: ' + error.message);
     }
@@ -238,54 +102,36 @@ function App() {
       }
 
       // Extract post info
-      const postInfo = await extractPostInfo(processedUrl);
+      const postInfo = extractPostInfo(processedUrl);
       console.log('Extracted post info:', postInfo);
 
       // Construct the Reddit API URL
       const apiUrl = `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postInfo.postId}.json`;
       console.log('Fetching from:', apiUrl);
 
-      // Use CORS proxy with JSON parsing
-      const proxyUrl = 'https://api.allorigins.win/get?url=';
-      const proxiedUrl = proxyUrl + encodeURIComponent(apiUrl);
-      console.log('Using proxy:', proxiedUrl);
-
-      // Fetch post data through proxy
-      const response = await fetch(proxiedUrl);
+      // Fetch post data
+      const response = await fetch(apiUrl);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.status}`);
-      }
-      
-      // Extract the contents from the proxy response
-      const proxyData = await response.json();
-      
-      if (!proxyData.contents) {
-        throw new Error('No content in proxy response');
+        throw new Error(`Reddit API error: ${response.status}`);
       }
       
       // Parse the Reddit JSON response
-      let redditData;
-      try {
-        redditData = JSON.parse(proxyData.contents);
-        console.log('Reddit API Response:', redditData);
-      } catch (error) {
-        console.error('Failed to parse Reddit response:', proxyData.contents);
-        throw new Error('Invalid Reddit API response');
-      }
+      const data = await response.json();
+      console.log('Reddit API Response:', data);
 
       // Process the response data
       let postData = null;
       let commentsData = [];
 
-      if (Array.isArray(redditData) && redditData.length > 0) {
+      if (Array.isArray(data) && data.length > 0) {
         // Standard post format
-        postData = redditData[0]?.data?.children[0]?.data;
-        commentsData = redditData[1]?.data?.children || [];
-      } else if (redditData?.data?.children) {
+        postData = data[0]?.data?.children[0]?.data;
+        commentsData = data[1]?.data?.children || [];
+      } else if (data?.data?.children) {
         // Subreddit or listing format
-        postData = redditData.data.children[0]?.data;
-        commentsData = redditData.data.children.slice(1) || [];
+        postData = data.data.children[0]?.data;
+        commentsData = data.data.children.slice(1) || [];
       }
 
       if (!postData) {
