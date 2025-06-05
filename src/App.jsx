@@ -159,42 +159,6 @@ function App() {
       setError(`Error fetching Reddit data: ${error.message}`);
       setIsFetching(false);
     }
-
-
-    
-      if (!postData) {
-        setError('Could not fetch post data. Please check the URL.');
-        setIsFetching(false);
-        return;
-      }
-
-      currentExtractedText = `Post Title: ${postData.title}.\n`;
-      if (postData.selftext) {
-        currentExtractedText += `Post Body: ${postData.selftext}.\n`;
-      }
-
-      // Handle comments differently for new format
-      if (commentsData && commentsData.length > 0) {
-        currentExtractedText += `\nTop Comments:\n`;
-        commentsData.slice(0, 10).forEach((comment, index) => {
-          if (comment.data) {
-            // For new format, comment data might be nested differently
-            const body = comment.data.body || comment.data.text;
-            if (body) {
-              currentExtractedText += `Comment ${index + 1}: ${body}\n`;
-            }
-          }
-        });
-      }
-      setExtractedText(currentExtractedText);
-      console.log('Extracted Content:\n', currentExtractedText);
-      setIsFetching(false); // Reddit data fetched
-      playText(currentExtractedText); // Automatically play after fetching
-    } catch (err) {
-      console.error('Error fetching Reddit data:', err);
-      setError(`An error occurred during fetch: ${err.message || 'Unknown error'}`);
-      setIsFetching(false);
-    }
   };
 
   const playText = (textToSpeak) => {
