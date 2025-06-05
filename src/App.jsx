@@ -247,33 +247,71 @@ function App() {
   };
 
   const handleResumePlay = () => {
-    if (!extractedText) {
-      setError('No content to play. Fetch Reddit post first.');
-      return;
-    }
-    if (isPaused && 'speechSynthesis' in window) {
-      window.speechSynthesis.resume();
-      setIsSpeaking(true);
+    try {
+      if (!extractedText) {
+        setError('No content to play. Fetch Reddit post first.');
+        return;
+      }
+
+      if (!('speechSynthesis' in window)) {
+        setError('Speech synthesis not supported');
+        return;
+      }
+
+      if (isPaused) {
+        window.speechSynthesis.resume();
+        setIsSpeaking(true);
+        setIsPaused(false);
+        setError(null);
+      } else if (!isSpeaking) {
+        playText(extractedText); // Start from beginning
+      }
+    } catch (error) {
+      console.error('Error resuming speech:', error);
+      setError('Failed to resume speech');
+      setIsSpeaking(false);
       setIsPaused(false);
-    } else if (!isSpeaking) {
-      playText(extractedText); // Start from beginning if not paused or already speaking
     }
   };
 
   const handlePauseSpeech = () => {
-    if (isSpeaking && !isPaused && 'speechSynthesis' in window) {
-      window.speechSynthesis.pause();
+    try {
+      if (!('speechSynthesis' in window)) {
+        setError('Speech synthesis not supported');
+        return;
+      }
+
+      if (isSpeaking && !isPaused) {
+        window.speechSynthesis.pause();
+        setIsSpeaking(false);
+        setIsPaused(true);
+        setError(null);
+      }
+    } catch (error) {
+      console.error('Error pausing speech:', error);
+      setError('Failed to pause speech');
+      // Reset state even if error occurs
       setIsSpeaking(false);
-      setIsPaused(true);
+      setIsPaused(false);
     }
   };
 
   const handleStopSpeech = () => {
-    if ((isSpeaking || isPaused) && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); 
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+        setIsPaused(false);
+        setError(null); // Clear any existing errors
+      } else {
+        setError('Speech synthesis not supported');
+      }
+    } catch (error) {
+      console.error('Error stopping speech:', error);
+      setError('Failed to stop speech');
+      // Reset state even if error occurs
       setIsSpeaking(false);
       setIsPaused(false);
-      // No need to reset extractedText, user might want to play it again
     }
   };
 
