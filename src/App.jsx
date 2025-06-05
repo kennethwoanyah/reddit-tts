@@ -3,6 +3,8 @@ import axios from 'axios';
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 import './App.css';
 
+// Test log at module level
+console.log("[App.jsx Module] Using ElevenLabs API Key:", import.meta.env.VITE_ELEVENLABS_API_KEY);
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 
 function App() {
@@ -27,6 +29,8 @@ function App() {
     setRedditUrl(event.target.value);
   };
 
+  // You can also keep your original console.log here if you want
+  console.log("[App Component Render] VITE_ELEVENLABS_API_KEY:", import.meta.env.VITE_ELEVENLABS_API_KEY); 
   const handleListenClick = async () => {
     if (!redditUrl) {
       setError('Please enter a Reddit URL.');
@@ -60,7 +64,7 @@ function App() {
 
       if (!postData) {
         setError('Could not fetch post data. Please check the URL.');
-        setIsLoading(false);
+        setIsLoading(false); // Ensure isLoading is reset if post data fetch fails
         return;
       }
 
