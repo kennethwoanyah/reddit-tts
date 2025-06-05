@@ -45,55 +45,59 @@ function App() {
 
     // Parse URL to handle query parameters correctly
     const urlObj = new URL(fetchUrl);
-    // Remove any existing query parameters
-    urlObj.search = '';
     
-    // Normalize the URL path
-    let path = urlObj.pathname;
+    // Extract post ID and subreddit using regex patterns
+    let postId = null;
+    let subreddit = null;
     
-    // Remove trailing slash
-    if (path.endsWith('/')) {
-      path = path.slice(0, -1);
-    }
+    // Remove query parameters and get clean path
+    const cleanPath = urlObj.pathname;
     
-    // Handle mobile Reddit URLs first
-    if (path.startsWith('/m/') || path.startsWith('/mobile/')) {
-      // Mobile Reddit format: /m/comments/post_id/post_title
-      // Convert to desktop format
-      const parts = path.split('/');
-      const postId = parts[parts.length - 2];
-      const subreddit = parts[parts.length - 4];
-      path = `/r/${subreddit}/comments/${postId}.json`;
-    }
-    // Handle new format URLs
-    else if (path.includes('/s/')) {
+    // Pattern 1: /r/subreddit/comments/post_id/...
+    const oldFormatMatch = cleanPath.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
+    
+    // Pattern 2: /r/subreddit/s/post_id
+    const newFormatMatch = cleanPath.match(/\/r\/([^/]+)\/s\/([^/]+)/);
+    
+    // Pattern 3: /m/comments/post_id/...
+    const mobileFormatMatch = cleanPath.match(/\/m\/comments\/([^/]+)/);
+    
+    if (oldFormatMatch) {
+      // Standard format: /r/subreddit/comments/post_id/...
+      subreddit = oldFormatMatch[1];
+      postId = oldFormatMatch[2];
+    } else if (newFormatMatch) {
       // New format: /r/subreddit/s/post_id
-      // For new format, we need to get the post ID and construct the proper URL
-      const parts = path.split('/');
-      const postId = parts[parts.length - 1];
-      const subreddit = parts[2];
-      path = `/r/${subreddit}/comments/${postId}.json`;
-    }
-    // Handle old format URLs
-    else if (path.includes('/comments/')) {
-      // Old format: /r/subreddit/comments/post_id/post_title
-      // Ensure .json is added
-      if (!path.endsWith('.json')) {
-        path += '.json';
-      }
-    }
-    // Handle subreddit URLs
-    else {
-      // Try to convert to new format if it's just a subreddit
-      const match = path.match(/^\/r\/([^/]+)$/);
-      if (match) {
-        // If it's just a subreddit URL, try to get the first post
-        path = `/r/${match[1]}/hot.json?limit=1`;
+      subreddit = newFormatMatch[1];
+      postId = newFormatMatch[2];
+    } else if (mobileFormatMatch) {
+      // Mobile format
+      postId = mobileFormatMatch[1];
+      // For mobile links, we'll get the subreddit from the API response
+    } else {
+      // Try to handle subreddit-only URLs
+      const subredditMatch = cleanPath.match(/^\/r\/([^/]+)$/);
+      if (subredditMatch) {
+        // If it's just a subreddit URL, get its hot posts
+        subreddit = subredditMatch[1];
+        path = `/r/${subreddit}/hot.json?limit=1`;
       } else {
-        // If we can't determine the format, throw an error
         throw new Error('Unsupported Reddit URL format');
       }
     }
+    
+    // Construct the API URL
+    if (postId) {
+      // If we have a post ID, always use the /comments/ endpoint
+      path = subreddit
+        ? `/r/${subreddit}/comments/${postId}.json`
+        : `/comments/${postId}.json`;
+    }
+    
+    // Update the URL object with the normalized path
+    urlObj.pathname = path;
+    // Remove all query parameters
+    urlObj.search = '';
     
     // Update the URL object with the normalized path
     urlObj.pathname = path;
