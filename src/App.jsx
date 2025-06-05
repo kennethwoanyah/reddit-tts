@@ -31,7 +31,19 @@ function App() {
     setError(null);
     // setExtractedText(''); // Clear previous text only when new fetch starts successfully or playText is called with new text
 
-    let fetchUrl = redditUrl.trim();
+    let rawUrl = redditUrl.trim();
+    let fetchUrl = '';
+
+    // Ensure HTTPS
+    if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+      fetchUrl = 'https://' + rawUrl;
+    } else if (rawUrl.startsWith('http://')) {
+      fetchUrl = rawUrl.replace('http://', 'https://');
+    } else {
+      fetchUrl = rawUrl; // Already HTTPS
+    }
+
+    // Append .json and remove trailing slash if necessary
     if (fetchUrl.endsWith('/')) fetchUrl = fetchUrl.slice(0, -1);
     if (!fetchUrl.endsWith('.json')) fetchUrl += '.json';
 
