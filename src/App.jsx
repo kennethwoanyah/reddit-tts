@@ -56,21 +56,34 @@ function App() {
       path = path.slice(0, -1);
     }
     
-    // Handle both URL formats
-    if (path.includes('/s/')) {
+    // Handle mobile Reddit URLs first
+    if (path.startsWith('/m/') || path.startsWith('/mobile/')) {
+      // Mobile Reddit format: /m/comments/post_id/post_title
+      // Convert to desktop format
+      const parts = path.split('/');
+      const postId = parts[parts.length - 2];
+      const subreddit = parts[parts.length - 4];
+      path = `/r/${subreddit}/comments/${postId}.json`;
+    }
+    // Handle new format URLs
+    else if (path.includes('/s/')) {
       // New format: /r/subreddit/s/post_id
       // For new format, we need to get the post ID and construct the proper URL
       const parts = path.split('/');
       const postId = parts[parts.length - 1];
       const subreddit = parts[2];
       path = `/r/${subreddit}/comments/${postId}.json`;
-    } else if (path.includes('/comments/')) {
+    }
+    // Handle old format URLs
+    else if (path.includes('/comments/')) {
       // Old format: /r/subreddit/comments/post_id/post_title
       // Ensure .json is added
       if (!path.endsWith('.json')) {
         path += '.json';
       }
-    } else {
+    }
+    // Handle subreddit URLs
+    else {
       // Try to convert to new format if it's just a subreddit
       const match = path.match(/^\/r\/([^/]+)$/);
       if (match) {
