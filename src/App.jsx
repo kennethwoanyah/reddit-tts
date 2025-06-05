@@ -47,14 +47,40 @@ function App() {
     const urlObj = new URL(fetchUrl);
     // Remove any existing query parameters
     urlObj.search = '';
-    // Remove trailing slash if present
-    if (urlObj.pathname.endsWith('/')) {
-      urlObj.pathname = urlObj.pathname.slice(0, -1);
+    
+    // Normalize the URL path
+    let path = urlObj.pathname;
+    
+    // Remove trailing slash
+    if (path.endsWith('/')) {
+      path = path.slice(0, -1);
     }
-    // Add .json if not already present
-    if (!urlObj.pathname.endsWith('.json')) {
-      urlObj.pathname += '.json';
+    
+    // Handle both URL formats
+    if (path.includes('/s/')) {
+      // New format: /r/subreddit/s/post_id
+      // Add .json to the end
+      path += '.json';
+    } else if (path.includes('/comments/')) {
+      // Old format: /r/subreddit/comments/post_id/post_title
+      // Ensure .json is added
+      if (!path.endsWith('.json')) {
+        path += '.json';
+      }
+    } else {
+      // Try to convert to new format if it's just a subreddit
+      const match = path.match(/^\/r\/([^/]+)$/);
+      if (match) {
+        // If it's just a subreddit URL, try to get the first post
+        path = `/r/${match[1]}/s/1.json`;
+      } else {
+        // If we can't determine the format, throw an error
+        throw new Error('Unsupported Reddit URL format');
+      }
     }
+    
+    // Update the URL object with the normalized path
+    urlObj.pathname = path;
     // Update fetchUrl with the cleaned URL
     fetchUrl = urlObj.toString();
 
