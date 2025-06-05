@@ -56,12 +56,27 @@ function App() {
   const resolveShareId = async (subreddit, shareId) => {
     const errors = [];
     
+    // Common headers for all requests
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1'
+    };
+    
     // Method 1: Try direct JSON API
     try {
       const shareUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}.json`;
       console.log('Trying JSON API:', shareUrl);
       
-      const response = await fetch(shareUrl);
+      const response = await fetch(shareUrl, { 
+        headers: {
+          ...headers,
+          'Accept': 'application/json'
+        }
+      });
+      
       if (response.ok) {
         const data = await response.json();
         if (data?.[0]?.data?.children?.[0]?.data?.id) {
@@ -69,7 +84,7 @@ function App() {
           return data[0].data.children[0].data.id;
         }
       }
-      errors.push('JSON API method failed');
+      errors.push(`JSON API method failed: ${response.status}`);
     } catch (error) {
       errors.push(`JSON API error: ${error.message}`);
     }
@@ -79,7 +94,7 @@ function App() {
       const oldRedditUrl = `https://old.reddit.com/r/${subreddit}/s/${shareId}`;
       console.log('Trying old.reddit.com:', oldRedditUrl);
       
-      const response = await fetch(oldRedditUrl);
+      const response = await fetch(oldRedditUrl, { headers });
       if (response.ok) {
         const html = await response.text();
         const match = html.match(/\/comments\/([a-zA-Z0-9]+)/);
@@ -89,7 +104,7 @@ function App() {
           return match[1];
         }
       }
-      errors.push('old.reddit.com method failed');
+      errors.push(`old.reddit.com method failed: ${response.status}`);
     } catch (error) {
       errors.push(`old.reddit.com error: ${error.message}`);
     }
@@ -99,7 +114,7 @@ function App() {
       const directUrl = `https://www.reddit.com/r/${subreddit}/s/${shareId}`;
       console.log('Trying direct HTML parsing:', directUrl);
       
-      const response = await fetch(directUrl);
+      const response = await fetch(directUrl, { headers });
       if (response.ok) {
         const html = await response.text();
         
@@ -107,7 +122,8 @@ function App() {
         const patterns = [
           /\/comments\/([a-zA-Z0-9]+)/,
           /data-post-id="([a-zA-Z0-9]+)"/,
-          /"postId":"([a-zA-Z0-9]+)"/
+          /"postId":"([a-zA-Z0-9]+)"/,
+          /"id":"([a-zA-Z0-9]+)"/
         ];
         
         for (const pattern of patterns) {
@@ -118,9 +134,40 @@ function App() {
           }
         }
       }
-      errors.push('Direct HTML parsing method failed');
+      errors.push(`Direct HTML parsing method failed: ${response.status}`);
     } catch (error) {
       errors.push(`Direct HTML error: ${error.message}`);
+    }
+    
+    // Method 4: Try using a CORS proxy as last resort
+    try {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const targetUrl = encodeURIComponent(`https://www.reddit.com/r/${subreddit}/s/${shareId}`);
+      console.log('Trying CORS proxy:', proxyUrl + targetUrl);
+      
+      const response = await fetch(proxyUrl + targetUrl, { headers });
+      if (response.ok) {
+        const html = await response.text();
+        
+        // Try all patterns again with proxied content
+        const patterns = [
+          /\/comments\/([a-zA-Z0-9]+)/,
+          /data-post-id="([a-zA-Z0-9]+)"/,
+          /"postId":"([a-zA-Z0-9]+)"/,
+          /"id":"([a-zA-Z0-9]+)"/
+        ];
+        
+        for (const pattern of patterns) {
+          const match = html.match(pattern);
+          if (match) {
+            console.log('Successfully resolved via CORS proxy');
+            return match[1];
+          }
+        }
+      }
+      errors.push(`CORS proxy method failed: ${response.status}`);
+    } catch (error) {
+      errors.push(`CORS proxy error: ${error.message}`);
     }
     
     // If all methods fail, throw error with details
