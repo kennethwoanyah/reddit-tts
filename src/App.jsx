@@ -55,26 +55,32 @@ function App() {
   // Helper function to get Reddit OAuth token
   const getRedditToken = async () => {
     try {
+      // Use the allorigins proxy to avoid CORS issues
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
       const tokenUrl = 'https://www.reddit.com/api/v1/access_token';
-      const clientId = import.meta.env.VITE_REDDIT_CLIENT_ID;
-      const clientSecret = import.meta.env.VITE_REDDIT_CLIENT_SECRET;
+      const clientId = import.meta.env.VITE_REDDIT_CLIENT_ID?.trim();
+      const clientSecret = import.meta.env.VITE_REDDIT_CLIENT_SECRET?.trim();
       
       console.log('Getting Reddit token with:', {
         clientId,
         userAgent: import.meta.env.VITE_REDDIT_USER_AGENT
       });
       
-      const authString = btoa(`${clientId}:${clientSecret}`);
-      console.log('Making token request to:', tokenUrl);
+      // Create form data
+      const formData = new URLSearchParams();
+      formData.append('grant_type', 'client_credentials');
       
-      const response = await fetch(tokenUrl, {
+      // Create authorization header
+      const authString = btoa(`${clientId}:${clientSecret}`);
+      
+      // Make the request through the proxy
+      const response = await fetch(proxyUrl + encodeURIComponent(tokenUrl), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${authString}`,
-          'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
+          'Authorization': `Basic ${authString}`
         },
-        body: 'grant_type=client_credentials'
+        body: formData.toString()
       });
 
       console.log('Token response status:', response.status);
@@ -118,14 +124,14 @@ function App() {
           console.log('Found share URL:', { subreddit: shareMatch[1], shareId: shareMatch[2] });
           const token = await getRedditToken();
           
-          // Use Reddit API to resolve share URL
+          // Use Reddit API through proxy to resolve share URL
+          const proxyUrl = 'https://api.allorigins.win/raw?url=';
           const apiUrl = `https://oauth.reddit.com/api/info?url=${encodeURIComponent(url)}`;
           console.log('Resolving share URL:', apiUrl);
           
-          const response = await fetch(apiUrl, {
+          const response = await fetch(proxyUrl + encodeURIComponent(apiUrl), {
             headers: {
-              'Authorization': `Bearer ${token}`,
-              'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
+              'Authorization': `Bearer ${token}`
             }
           });
           
