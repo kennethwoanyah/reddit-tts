@@ -245,37 +245,47 @@ function App() {
       const apiUrl = `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postInfo.postId}.json`;
       console.log('Fetching from:', apiUrl);
 
-      // Use CORS proxy for all Reddit requests
-      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      // Use CORS proxy with JSON parsing
+      const proxyUrl = 'https://api.allorigins.win/get?url=';
       const proxiedUrl = proxyUrl + encodeURIComponent(apiUrl);
       console.log('Using proxy:', proxiedUrl);
 
       // Fetch post data through proxy
-      const response = await fetch(proxiedUrl, {
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-
+      const response = await fetch(proxiedUrl);
+      
       if (!response.ok) {
-        throw new Error(`Reddit API error: ${response.status}`);
+        throw new Error(`Failed to fetch: ${response.status}`);
       }
-
-      const data = await response.json();
-      console.log('Reddit API Response:', data);
+      
+      // Extract the contents from the proxy response
+      const proxyData = await response.json();
+      
+      if (!proxyData.contents) {
+        throw new Error('No content in proxy response');
+      }
+      
+      // Parse the Reddit JSON response
+      let redditData;
+      try {
+        redditData = JSON.parse(proxyData.contents);
+        console.log('Reddit API Response:', redditData);
+      } catch (error) {
+        console.error('Failed to parse Reddit response:', proxyData.contents);
+        throw new Error('Invalid Reddit API response');
+      }
 
       // Process the response data
       let postData = null;
       let commentsData = [];
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(redditData) && redditData.length > 0) {
         // Standard post format
-        postData = data[0]?.data?.children[0]?.data;
-        commentsData = data[1]?.data?.children || [];
-      } else if (data?.data?.children) {
+        postData = redditData[0]?.data?.children[0]?.data;
+        commentsData = redditData[1]?.data?.children || [];
+      } else if (redditData?.data?.children) {
         // Subreddit or listing format
-        postData = data.data.children[0]?.data;
-        commentsData = data.data.children.slice(1) || [];
+        postData = redditData.data.children[0]?.data;
+        commentsData = redditData.data.children.slice(1) || [];
       }
 
       if (!postData) {
