@@ -52,8 +52,36 @@ function App() {
     }
   };
 
+  // Helper function to get Reddit OAuth token
+  const getRedditToken = async () => {
+    try {
+      const tokenUrl = 'https://www.reddit.com/api/v1/access_token';
+      const clientId = import.meta.env.VITE_REDDIT_CLIENT_ID;
+      const clientSecret = import.meta.env.VITE_REDDIT_CLIENT_SECRET;
+      
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`
+        },
+        body: 'grant_type=client_credentials'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Token request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.access_token;
+    } catch (error) {
+      console.error('Error getting Reddit token:', error);
+      throw error;
+    }
+  };
+
   // Helper function to extract post info from URL
-  const extractPostInfo = (url) => {
+  const extractPostInfo = async (url) => {
     try {
       const urlObj = new URL(url);
       const path = urlObj.pathname;
@@ -62,12 +90,46 @@ function App() {
       const postMatch = path.match(/\/r\/([^/]+)\/comments\/([^/]+)/);
       if (postMatch) {
         return {
+          type: 'standard',
           subreddit: postMatch[1],
           postId: postMatch[2]
         };
       }
       
-      throw new Error('Please use a standard Reddit post URL (e.g., https://www.reddit.com/r/subreddit/comments/postid/...)');
+      // Handle share URLs (/r/subreddit/s/shortId)
+      const shareMatch = path.match(/\/r\/([^/]+)\/s\/([^/]+)/);
+      if (shareMatch) {
+        // Get OAuth token
+        const token = await getRedditToken();
+        
+        // Use Reddit API to resolve share URL
+        const apiUrl = `https://oauth.reddit.com/api/info?url=${encodeURIComponent(url)}`;
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Reddit API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const post = data?.data?.children?.[0]?.data;
+        
+        if (!post?.id) {
+          throw new Error('Could not resolve share URL');
+        }
+        
+        return {
+          type: 'share',
+          subreddit: post.subreddit,
+          postId: post.id
+        };
+      }
+      
+      throw new Error('Please use a standard Reddit post URL or share URL');
     } catch (error) {
       throw new Error('Invalid Reddit URL: ' + error.message);
     }
@@ -100,7 +162,7 @@ function App() {
       }
 
       // Extract post info
-      const postInfo = extractPostInfo(processedUrl);
+      const postInfo = await extractPostInfo(processedUrl);
       console.log('Extracted post info:', postInfo);
 
       // Construct API URL
