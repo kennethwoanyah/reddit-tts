@@ -67,16 +67,41 @@ function App() {
       
       // The proxy will return the HTML content
       const html = await response.text();
+      console.log('Got HTML response length:', html.length);
       
-      // Look for the canonical URL in the HTML
-      const canonicalMatch = html.match(/canonical"\s+href="([^"]+)"/i);
-      if (!canonicalMatch) {
-        throw new Error('Could not find canonical URL in response');
+      // Try different patterns to find the full URL
+      const patterns = [
+        // Canonical URL
+        /canonical"\s+href="([^"]+)"/i,
+        // Meta refresh URL
+        /content="0;\s*URL=([^"]+)"/i,
+        // Comments link
+        /href="(\/r\/[^/]+\/comments\/[^/]+)/i,
+        // JSON data
+        /"permalink":"([^"]+)"/,
+        // Post URL
+        /"url":"([^"]+\/comments\/[^"]+)"/
+      ];
+      
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match) {
+          let fullUrl = match[1];
+          
+          // Clean up the URL
+          if (!fullUrl.startsWith('http')) {
+            fullUrl = 'https://www.reddit.com' + fullUrl;
+          }
+          fullUrl = fullUrl.replace(/\\\//g, '/'); // Fix escaped slashes
+          
+          console.log('Found URL using pattern:', pattern, '\nResolved to:', fullUrl);
+          return fullUrl;
+        }
       }
       
-      const fullUrl = canonicalMatch[1];
-      console.log('Resolved to full URL:', fullUrl);
-      return fullUrl;
+      // If no patterns match, log a sample of the HTML for debugging
+      console.error('Could not find URL in HTML. Sample:', html.substring(0, 500));
+      throw new Error('Could not find Reddit post URL in response');
     } catch (error) {
       console.error('Share URL resolution error:', error);
       throw new Error(`Failed to resolve share URL: ${error.message}`);
