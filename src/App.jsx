@@ -113,14 +113,32 @@ function App() {
     fetchUrl = proxyUrl + fetchUrl;
 
     try {
-      // Use our backend server to fetch the content
-      const backendUrl = 'http://localhost:8000/fetch_reddit_content?url=' + encodeURIComponent(fetchUrl);
-      const response = await axios.get(backendUrl);
-      console.log('Response data:', response.data);
+      const response = await axios.get(fetchUrl, { headers });
       
       // Handle both new and old format responses
       let postData = null;
       let commentsData = [];
+      
+      // Try new format first
+      if (response.data?.data?.post) {
+        // New format response structure
+        postData = response.data.data.post;
+        commentsData = response.data.data.comments || [];
+        console.log('Using new format:', { post: postData.title, comments: commentsData.length });
+      } else if (Array.isArray(response.data) && response.data.length > 1) {
+        // Old format response structure
+        postData = response.data[0]?.data?.children[0]?.data;
+        commentsData = response.data[1]?.data?.children || [];
+        console.log('Using old format:', { post: postData?.title, comments: commentsData.length });
+      } else {
+        // Try another approach for new format
+        if (response.data?.data?.children) {
+          // Sometimes new format might have different structure
+          postData = response.data.data.children[0]?.data;
+          commentsData = response.data.data.children.slice(1) || [];
+          console.log('Using alternative new format:', { post: postData?.title, comments: commentsData.length });
+        }
+      }
       
       // Try new format first
       if (response.data?.data?.post) {
