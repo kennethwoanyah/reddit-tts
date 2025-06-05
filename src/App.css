@@ -1,14 +1,42 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f4f7f6; /* Light grayish-blue background */
+  color: #333;
+  text-align: center; /* Center text for elements like title */
+  display: flex; /* Ensure body itself can be a flex container if #root needs specific alignment */
+  justify-content: center; /* Center #root if it's not full width */
+}
+
+#root {
+  width: 100%;
+}
+
 .app-container {
+  background-color: #ffffff; /* White background for the app area */
+  width: 100%;
+  min-height: 100vh; /* Fill the viewport height */
+  box-sizing: border-box;
+  padding: 1rem; /* Default padding, will adjust with media queries */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center content like title and input area */
+  justify-content: flex-start; /* Align content to the top */
+}
+
+/* Optional: Wrapper for main interactive content to constrain its width on very large screens */
+.content-area {
+  width: 100%;
+  max-width: 700px; /* Max width for the interactive elements */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  background-color: #f0f2f5;
-  font-family: sans-serif;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
-
 
 .title {
   color: #333;
@@ -61,10 +89,94 @@
 }
 
 .error-message {
-  color: red;
+  color: #d32f2f; /* Material Design error color */
   margin-top: 1rem;
-  text-align: center;
-  max-width: 400px;
+  font-size: 0.9rem;
+}
+
+.controls-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 1.5rem;
+  gap: 1rem; /* Space between control buttons */
+}
+
+.control-button {
+  background-color: #6c757d; /* Secondary button color */
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.control-button:hover:not(:disabled) {
+  background-color: #5a6268;
+}
+
+.control-button:disabled {
+  background-color: #adb5bd;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) { /* Mobile devices */
+  .app-container {
+    padding: 1rem; /* Slightly less padding on mobile */
+    justify-content: flex-start; /* Ensure content starts from top */
+  }
+
+  .content-area {
+    padding: 0 0.5rem; /* Give a little horizontal space if content-area is used */
+  }
+
+  .title {
+    font-size: 1.8rem;
+    margin-top: 1rem; /* Add some margin at the top on mobile */
+    margin-bottom: 1.5rem;
+  }
+
+  .input-container {
+    flex-direction: column;
+    width: 100%; /* Ensure input container takes full width of content-area */
+    gap: 0.8rem;
+  }
+
+  .reddit-url-input {
+    width: 100%; 
+    font-size: 0.95rem;
+    padding: 0.7rem;
+  }
+
+  .listen-button {
+    width: 100%; 
+    padding: 0.8rem;
+    font-size: 1rem;
+  }
+
+  .controls-container {
+    flex-direction: column; 
+    width: 100%;
+    gap: 0.8rem;
+  }
+
+  .control-button {
+    width: 100%; 
+    padding: 0.7rem;
+  }
+}
+
+@media (min-width: 769px) { /* Desktop and larger tablets */
+  .app-container {
+    padding: 2rem; /* More padding on larger screens */
+    justify-content: center; /* Center content vertically on larger screens */
+  }
+  .title {
+    margin-top: 0; /* Reset top margin if centered */
+  }
 }
 
 /* For debugging display of extracted text */
