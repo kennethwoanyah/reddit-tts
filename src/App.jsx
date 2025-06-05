@@ -92,12 +92,25 @@ function App() {
 
     try {
       const response = await axios.get(fetchUrl, { headers });
-      const postData = response.data[0]?.data?.children[0]?.data;
-      const commentsData = response.data[1]?.data?.children;
+      
+      // Handle both new and old format responses
+      let postData = null;
+      let commentsData = [];
+      
+      // Try new format first
+      if (response.data?.data?.post) {
+        // New format response structure
+        postData = response.data.data.post;
+        commentsData = response.data.data.comments || [];
+      } else if (Array.isArray(response.data) && response.data.length > 1) {
+        // Old format response structure
+        postData = response.data[0]?.data?.children[0]?.data;
+        commentsData = response.data[1]?.data?.children || [];
+      }
 
       if (!postData) {
         setError('Could not fetch post data. Please check the URL.');
-        setIsLoading(false); // Ensure isLoading is reset if post data fetch fails
+        setIsLoading(false);
         return;
       }
 
@@ -106,11 +119,16 @@ function App() {
         currentExtractedText += `Post Body: ${postData.selftext}.\n`;
       }
 
+      // Handle comments differently for new format
       if (commentsData && commentsData.length > 0) {
         currentExtractedText += `\nTop Comments:\n`;
         commentsData.slice(0, 10).forEach((comment, index) => {
-          if (comment.data.body) {
-            currentExtractedText += `Comment ${index + 1}: ${comment.data.body}\n`;
+          if (comment.data) {
+            // For new format, comment data might be nested differently
+            const body = comment.data.body || comment.data.text;
+            if (body) {
+              currentExtractedText += `Comment ${index + 1}: ${body}\n`;
+            }
           }
         });
       }
