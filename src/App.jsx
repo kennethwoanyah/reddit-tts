@@ -49,6 +49,7 @@ function App() {
     // Extract post ID and subreddit using regex patterns
     let postId = null;
     let subreddit = null;
+    let path = '';
     
     // Remove query parameters and get clean path
     const cleanPath = urlObj.pathname;
@@ -62,117 +63,106 @@ function App() {
     // Pattern 3: /m/comments/post_id/...
     const mobileFormatMatch = cleanPath.match(/\/m\/comments\/([^/]+)/);
     
-    if (oldFormatMatch) {
-      // Standard format: /r/subreddit/comments/post_id/...
-      subreddit = oldFormatMatch[1];
-      postId = oldFormatMatch[2];
-    } else if (newFormatMatch) {
-      // New format: /r/subreddit/s/post_id
-      subreddit = newFormatMatch[1];
-      postId = newFormatMatch[2];
-    } else if (mobileFormatMatch) {
-      // Mobile format
-      postId = mobileFormatMatch[1];
-      // For mobile links, we'll get the subreddit from the API response
-    } else {
-      // Try to handle subreddit-only URLs
-      const subredditMatch = cleanPath.match(/^\/r\/([^/]+)$/);
-      if (subredditMatch) {
-        // If it's just a subreddit URL, get its hot posts
-        subreddit = subredditMatch[1];
-        path = `/r/${subreddit}/hot.json?limit=1`;
-      } else {
-        throw new Error('Unsupported Reddit URL format');
-      }
-    }
-    
-    // Construct the API URL
-    if (postId) {
-      // If we have a post ID, always use the /comments/ endpoint
-      path = subreddit
-        ? `/r/${subreddit}/comments/${postId}.json`
-        : `/comments/${postId}.json`;
-    }
-    
-    // Update the URL object with the normalized path
-    urlObj.pathname = path;
-    // Remove all query parameters
-    urlObj.search = '';
-    
-    // Update the URL object with the normalized path
-    urlObj.pathname = path;
-    
-    // Update fetchUrl with the cleaned URL
-    fetchUrl = urlObj.toString();
-
-    let currentExtractedText = '';
-    // Add Reddit API headers
-    const headers = {
-      'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      'Origin': 'https://www.reddit.com',
-      'Referer': 'https://www.reddit.com/',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-    
-    // Use a more reliable CORS proxy
-    const proxyUrl = 'https://api.allorigins.win/raw?url=';
-    fetchUrl = proxyUrl + encodeURIComponent(fetchUrl);
-
     try {
-      const response = await axios.get(fetchUrl, { headers });
-      
-      // Handle both new and old format responses
+      // Process the URL and extract post ID and subreddit
+      if (oldFormatMatch) {
+        // Standard format: /r/subreddit/comments/post_id/...
+        subreddit = oldFormatMatch[1];
+        postId = oldFormatMatch[2];
+      } else if (newFormatMatch) {
+        // New format: /r/subreddit/s/post_id
+        subreddit = newFormatMatch[1];
+        postId = newFormatMatch[2];
+      } else if (mobileFormatMatch) {
+        // Mobile format
+        postId = mobileFormatMatch[1];
+      } else {
+        // Try to handle subreddit-only URLs
+        const subredditMatch = cleanPath.match(/^\/r\/([^/]+)$/);
+        if (subredditMatch) {
+          subreddit = subredditMatch[1];
+          path = `/r/${subreddit}/hot.json?limit=1`;
+        } else {
+          throw new Error('Unsupported Reddit URL format');
+        }
+      }
+
+      // Construct the API URL
+      if (postId) {
+        path = subreddit
+          ? `/r/${subreddit}/comments/${postId}.json`
+          : `/comments/${postId}.json`;
+      }
+
+      // Add Reddit API headers
+      const headers = {
+        'Accept': 'application/json',
+        'User-Agent': import.meta.env.VITE_REDDIT_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      };
+
+      // Construct the final URL
+      const finalUrl = new URL('https://www.reddit.com' + path);
+      console.log('Processing Reddit URL:', finalUrl.toString());
+
+      // Use a more reliable CORS proxy
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const requestUrl = proxyUrl + encodeURIComponent(finalUrl.toString());
+
+      // Make the request
+      const response = await axios.get(requestUrl, { headers });
+      console.log('Reddit API Response:', response.data);
+
+      // Initialize variables
       let postData = null;
       let commentsData = [];
-      
-      // Try new format first
-      if (response.data?.data?.post) {
-        // New format response structure
-        postData = response.data.data.post;
-        commentsData = response.data.data.comments || [];
-        console.log('Using new format:', { post: postData.title, comments: commentsData.length });
-      } else if (Array.isArray(response.data) && response.data.length > 1) {
-        // Old format response structure
+      let currentExtractedText = '';
+
+      // Process the response data
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // Standard format response
         postData = response.data[0]?.data?.children[0]?.data;
         commentsData = response.data[1]?.data?.children || [];
-        console.log('Using old format:', { post: postData?.title, comments: commentsData.length });
-      } else {
-        // Try another approach for new format
-        if (response.data?.data?.children) {
-          // Sometimes new format might have different structure
-          postData = response.data.data.children[0]?.data;
-          commentsData = response.data.data.children.slice(1) || [];
-          console.log('Using alternative new format:', { post: postData?.title, comments: commentsData.length });
-        }
-      }
-      
-      // Try new format first
-      if (response.data?.data?.post) {
-        // New format response structure
-        postData = response.data.data.post;
-        commentsData = response.data.data.comments || [];
-        console.log('Using new format:', { post: postData.title, comments: commentsData.length });
-      } else if (Array.isArray(response.data) && response.data.length > 1) {
-        // Old format response structure
-        postData = response.data[0]?.data?.children[0]?.data;
-        commentsData = response.data[1]?.data?.children || [];
-        console.log('Using old format:', { post: postData?.title, comments: commentsData.length });
-      } else {
-        // Try another approach for new format
-        if (response.data?.data?.children) {
-          // Sometimes new format might have different structure
-          postData = response.data.data.children[0]?.data;
-          commentsData = response.data.data.children.slice(1) || [];
-          console.log('Using alternative new format:', { post: postData?.title, comments: commentsData.length });
-        }
+        console.log('Using standard format:', { post: postData?.title, comments: commentsData?.length });
+      } else if (response.data?.data?.children) {
+        // Subreddit or alternative format
+        postData = response.data.data.children[0]?.data;
+        commentsData = response.data.data.children.slice(1) || [];
+        console.log('Using alternative format:', { post: postData?.title, comments: commentsData?.length });
       }
 
       if (!postData) {
+        throw new Error('Could not extract post data from response');
+      }
+
+      // Extract text content
+      currentExtractedText = `Post Title: ${postData.title}\n`;
+      if (postData.selftext) {
+        currentExtractedText += `Post Body: ${postData.selftext}\n`;
+      }
+
+      if (commentsData && commentsData.length > 0) {
+        currentExtractedText += `\nTop Comments:\n`;
+        commentsData.slice(0, 10).forEach((comment, index) => {
+          if (comment.data?.body) {
+            currentExtractedText += `Comment ${index + 1}: ${comment.data.body}\n`;
+          }
+        });
+      }
+
+      setExtractedText(currentExtractedText);
+      console.log('Extracted Content:\n', currentExtractedText);
+      setIsFetching(false);
+      playText(currentExtractedText);
+
+    } catch (error) {
+      console.error('Error fetching Reddit data:', error);
+      setError(`Error fetching Reddit data: ${error.message}`);
+      setIsFetching(false);
+    }
+
+      if (!postData) {
         setError('Could not fetch post data. Please check the URL.');
-        setIsLoading(false);
+        setIsFetching(false);
         return;
       }
 
