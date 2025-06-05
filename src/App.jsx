@@ -241,12 +241,17 @@ function App() {
       const postInfo = await extractPostInfo(processedUrl);
       console.log('Extracted post info:', postInfo);
 
-      // Construct API URL
+      // Construct the Reddit API URL
       const apiUrl = `https://www.reddit.com/r/${postInfo.subreddit}/comments/${postInfo.postId}.json`;
       console.log('Fetching from:', apiUrl);
 
-      // Fetch post data
-      const response = await fetch(apiUrl, {
+      // Use CORS proxy for all Reddit requests
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const proxiedUrl = proxyUrl + encodeURIComponent(apiUrl);
+      console.log('Using proxy:', proxiedUrl);
+
+      // Fetch post data through proxy
+      const response = await fetch(proxiedUrl, {
         headers: {
           'Accept': 'application/json'
         }
